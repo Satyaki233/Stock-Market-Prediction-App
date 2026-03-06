@@ -1,0 +1,2 @@
+yfinance
+apache-airflow-providers-postgres
