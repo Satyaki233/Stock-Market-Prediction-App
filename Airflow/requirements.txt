@@ -1,2 +1,6 @@
 yfinance
-apache-airflow-providers-postgres
+psycopg2-binary
+lightgbm
+mlflow==2.19.0
+scikit-learn
+SQLAlchemy>=2.0

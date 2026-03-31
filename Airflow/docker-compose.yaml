@@ -51,6 +51,8 @@ x-airflow-common:
   # and uncomment the "build" line below, Then run `docker-compose build` to build the images.
   # image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:3.1.7}
   build: .
+  networks:
+    - airflow-net
   env_file:
     - ${ENV_FILE_PATH:-.env}
   environment:
@@ -70,6 +72,7 @@ x-airflow-common:
     # See https://airflow.apache.org/docs/apache-airflow/stable/administration-and-deployment/logging-monitoring/check-health.html#scheduler-health-check-server
     # yamllint enable rule:line-length
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
+    MLFLOW_TRACKING_URI: 'http://mlflow:5000'
     # WARNING: Use _PIP_ADDITIONAL_REQUIREMENTS option ONLY for a quick checks
     # for other purpose (development, test and especially production usage) build/extend Airflow image.
     _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-}
@@ -91,6 +94,8 @@ x-airflow-common:
 services:
   postgres:
     image: postgres:16
+    networks:
+      - airflow-net
     environment:
       POSTGRES_USER: airflow
       POSTGRES_PASSWORD: airflow
@@ -109,6 +114,8 @@ services:
     # Redis is limited to 7.2-bookworm due to licencing change
     # https://redis.io/blog/redis-adopts-dual-source-available-licensing/
     image: redis:7.2-bookworm
+    networks:
+      - airflow-net
     expose:
       - 6379
     healthcheck:
@@ -313,6 +320,33 @@ services:
     depends_on:
       <<: *airflow-common-depends-on
 
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.19.0
+    networks:
+      - airflow-net
+    command: >-
+      bash -c "pip install psycopg2-binary --quiet &&
+      python -c \"import psycopg2; c=psycopg2.connect(host='postgres',user='airflow',password='airflow',dbname='airflow'); c.autocommit=True; c.cursor().execute('CREATE DATABASE mlflow')\" 2>/dev/null || true &&
+      mlflow db upgrade postgresql+psycopg2://airflow:airflow@postgres/mlflow &&
+      mlflow server --host 0.0.0.0 --port 5000
+      --backend-store-uri postgresql+psycopg2://airflow:airflow@postgres/mlflow
+      --artifacts-destination /opt/mlflow/artifacts
+      --serve-artifacts"
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow-artifacts:/opt/mlflow/artifacts
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+
   # You can enable flower by adding "--profile flower" option e.g. docker-compose --profile flower up
   # or by explicitly targeted on the command line e.g. docker-compose up flower.
   # See: https://docs.docker.com/compose/profiles/
@@ -335,5 +369,10 @@ services:
       airflow-init:
         condition: service_completed_successfully
 
+networks:
+  airflow-net:
+    driver: bridge
+
 volumes:
   postgres-db-volume:
+  mlflow-artifacts:

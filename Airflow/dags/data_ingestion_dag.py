@@ -20,10 +20,11 @@ import logging
 import pendulum
 from airflow.sdk import dag, task
 from airflow.providers.postgres.hooks.postgres import PostgresHook
+from utils.db_manager import db_manager
 
 log = logging.getLogger(__name__)
 
-POSTGRES_CONN_ID = "stock_db_conn"
+
 
 # Fallback symbol lists used when nse_symbol_registry is empty / missing
 _FALLBACK_EQUITIES = [
@@ -71,7 +72,7 @@ def indian_stock_data_ingestion():
         Ensure all required tables exist before ingestion starts.
         Creates them if missing — safe for first run.
         """
-        hook = PostgresHook(postgres_conn_id=POSTGRES_CONN_ID)
+        hook = db_manager.get_hook()
 
         ddl = """
               CREATE TABLE IF NOT EXISTS ingestion_delta_table (
@@ -173,7 +174,7 @@ def indian_stock_data_ingestion():
 
         Falls back to hardcoded lists if the registry table is missing or empty.
         """
-        hook = PostgresHook(postgres_conn_id=POSTGRES_CONN_ID)
+        hook = db_manager.get_hook()
 
         try:
             equity_rows = hook.get_records("""
@@ -240,7 +241,7 @@ def indian_stock_data_ingestion():
             log.warning(f"[price/{symbol_type}] No symbols provided — skipping.")
             return
 
-        hook    = PostgresHook(postgres_conn_id=POSTGRES_CONN_ID)
+        hook    = db_manager.get_hook()
         engine  = hook.get_sqlalchemy_engine()
         staging = f"_staging_price_{symbol_type}_tmp"
 
@@ -291,17 +292,15 @@ def indian_stock_data_ingestion():
                     .dropna(subset=["open", "close"])
                 )
 
-                # ── Save this symbol's DataFrame to staging via to_sql ─────
-                df.to_sql(
-                    staging, engine,
-                    if_exists="replace",
-                    index=False,
-                    method="multi",
-                    chunksize=5000,
-                )
-
-                # ── Upsert from staging → price_history ───────────────────
+                # ── Stage + upsert on the same connection ─────────────────
                 with engine.begin() as conn:
+                    df.to_sql(
+                        staging, conn,
+                        if_exists="replace",
+                        index=False,
+                        method="multi",
+                        chunksize=5000,
+                    )
                     result = conn.execute(text(f"""
                         INSERT INTO price_history
                             (symbol, date, open, high, low, close, adj_close, volume)
@@ -385,7 +384,7 @@ def indian_stock_data_ingestion():
             log.warning("[dividends] No equity symbols — skipping.")
             return
 
-        hook    = PostgresHook(postgres_conn_id=POSTGRES_CONN_ID)
+        hook    = db_manager.get_hook()
         engine  = hook.get_sqlalchemy_engine()
         staging = "_staging_dividends_tmp"
 
@@ -424,17 +423,15 @@ def indian_stock_data_ingestion():
                     df["amount"]  = df["amount"].astype(float)
                     df = df[["symbol", "ex_date", "amount"]]
 
-                    # ── Save this symbol's DataFrame via to_sql ────────────
-                    df.to_sql(
-                        staging, engine,
-                        if_exists="replace",
-                        index=False,
-                        method="multi",
-                        chunksize=5000,
-                    )
-
-                    # ── Upsert from staging → dividends ───────────────────
+                    # ── Stage + upsert on the same connection ─────────────
                     with engine.begin() as conn:
+                        df.to_sql(
+                            staging, conn,
+                            if_exists="replace",
+                            index=False,
+                            method="multi",
+                            chunksize=5000,
+                        )
                         conn.execute(text("""
                             INSERT INTO dividends (symbol, ex_date, amount)
                             SELECT symbol, ex_date, amount
@@ -505,7 +502,7 @@ def indian_stock_data_ingestion():
             log.warning("[splits] No equity symbols — skipping.")
             return
 
-        hook    = PostgresHook(postgres_conn_id=POSTGRES_CONN_ID)
+        hook    = db_manager.get_hook()
         engine  = hook.get_sqlalchemy_engine()
         staging = "_staging_splits_tmp"
 
@@ -544,17 +541,15 @@ def indian_stock_data_ingestion():
                     df["ratio"]      = df["ratio"].astype(float)
                     df = df[["symbol", "split_date", "ratio"]]
 
-                    # ── Save this symbol's DataFrame via to_sql ────────────
-                    df.to_sql(
-                        staging, engine,
-                        if_exists="replace",
-                        index=False,
-                        method="multi",
-                        chunksize=5000,
-                    )
-
-                    # ── Upsert from staging → splits ───────────────────────
+                    # ── Stage + upsert on the same connection ─────────────
                     with engine.begin() as conn:
+                        df.to_sql(
+                            staging, conn,
+                            if_exists="replace",
+                            index=False,
+                            method="multi",
+                            chunksize=5000,
+                        )
                         conn.execute(text("""
                             INSERT INTO splits (symbol, split_date, ratio)
                             SELECT symbol, split_date, ratio
@@ -618,7 +613,7 @@ def indian_stock_data_ingestion():
             log.warning("[fundamentals] No equity symbols — skipping.")
             return
 
-        hook  = PostgresHook(postgres_conn_id=POSTGRES_CONN_ID)
+        hook  = db_manager.get_hook()
         today = date.today()
 
         for i, symbol in enumerate(equities):
@@ -698,7 +693,7 @@ def indian_stock_data_ingestion():
         Query ingestion_log and print a summary of this run.
         Useful for monitoring and alerting.
         """
-        hook = PostgresHook(postgres_conn_id=POSTGRES_CONN_ID)
+        hook = db_manager.get_hook()
 
         rows = hook.get_records("""
             SELECT data_type, status, COUNT(*) as count, SUM(rows_affected) as total_rows
