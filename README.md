@@ -4,6 +4,23 @@ An end-to-end ML pipeline that ingests Indian stock market data, engineers featu
 
 ---
 
+## Technologies Used
+
+| | Technology | Version | Role |
+|---|---|---|---|
+| **Orchestration** | Apache Airflow | 3.1.7 | Schedules and monitors the entire pipeline via DAGs |
+| **Task Queue** | Redis | 7.2 | Celery message broker for distributing Airflow tasks across workers |
+| **Data Source** | yfinance | 1.3.0 | Fetches OHLCV, dividends, splits, and fundamentals from Yahoo Finance |
+| **Primary Database** | PostgreSQL | 16 | Stores raw market data, engineered features, and predictions |
+| **ML Framework** | LightGBM | 4.5.0 | Gradient boosting classifier for next-day direction prediction |
+| **ML Ops** | MLflow | 2.19.0 | Tracks experiments, logs metrics/artifacts, and registers models |
+| **Serving Database** | MongoDB | 7 | Document store for serving predictions to the API layer |
+| **Data Processing** | pandas + NumPy | latest | Feature computation and data wrangling |
+| **Containerisation** | Docker + Compose | latest | Runs every service in isolated, reproducible containers |
+| **Python** | Python | 3.12 | Runtime for all DAGs and ML code |
+
+---
+
 ## What We Are Building
 
 We predict whether a given NSE-listed stock will close **up or down the next trading day**. The entire pipeline runs automatically every weekday, keeping predictions fresh without any manual intervention.
