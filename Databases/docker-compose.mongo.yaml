@@ -1,0 +1,23 @@
+---
+services:
+  mongodb:
+    image: mongo:7
+    container_name: stock_mongodb
+    restart: always
+    ports:
+      - "0.0.0.0:27017:27017"    # accessible from any machine on the network
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin
+      MONGO_INITDB_DATABASE: stock_db
+    volumes:
+      - stock_mongo_data:/data/db  # persistent named volume
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+volumes:
+  stock_mongo_data:

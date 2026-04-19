@@ -262,6 +262,11 @@ def stock_model_training():
 
         df["date"] = pd.to_datetime(df["date"])
 
+        # ── Cast numeric features to float ────────────────────────────────
+        # PostgreSQL NUMERIC columns arrive as Decimal objects (object dtype).
+        # LightGBM requires int/float/bool — coerce converts NULLs to NaN.
+        df[NUMERIC_FEATURES] = df[NUMERIC_FEATURES].apply(pd.to_numeric, errors="coerce")
+
         # ── Label-encode categoricals ─────────────────────────────────────
         le_sector   = LabelEncoder()
         le_industry = LabelEncoder()
@@ -388,6 +393,9 @@ def stock_model_training():
         )
 
         df["date"] = pd.to_datetime(df["date"])
+
+        # ── Cast numeric features to float ────────────────────────────────
+        df[NUMERIC_FEATURES] = df[NUMERIC_FEATURES].apply(pd.to_numeric, errors="coerce")
 
         # ── Encode categoricals ───────────────────────────────────────────
         le_sector   = LabelEncoder()
@@ -545,6 +553,9 @@ def stock_model_training():
         if latest_df.empty:
             log.warning("No rows in stock_features — skipping predictions.")
             return
+
+        # ── Cast numeric features to float ────────────────────────────────
+        latest_df[NUMERIC_FEATURES] = latest_df[NUMERIC_FEATURES].apply(pd.to_numeric, errors="coerce")
 
         log.info(f"Generating predictions for {len(latest_df)} symbols.")
 

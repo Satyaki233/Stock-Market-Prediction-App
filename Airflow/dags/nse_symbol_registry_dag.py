@@ -142,6 +142,7 @@ def nse_symbol_registry():
                 market_lot      INTEGER,
                 is_active       BOOLEAN      DEFAULT TRUE,
                 last_updated    TIMESTAMP    DEFAULT NOW(),
+                highlight       BOOLEAN      DEFAULT FALSE,
                 PRIMARY KEY (symbol, symbol_type)
             );
 
